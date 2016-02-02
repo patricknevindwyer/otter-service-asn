@@ -33,28 +33,26 @@ var RESOLVED_DATA = {};
 function resolveData(queuedItem, next) {
     console.log("Resolving ANSs for [%s]\n\t%s", queuedItem.uuid, queuedItem.ip);
     
-    var ip = queuedItem.ip;
-    var ip_int = ip.toLong(ip);
+    var raw_ip = queuedItem.ip;
+    var ip_int = ip.toLong(raw_ip);
     db.all("select * from ipv4 where ipv4.ip_start_int <= ? and ipv4.ip_end_int >= ?", ip_int, ip_int, function (err, ipv4_rows) {
         if (err) {
-            RESOLVED_DATA[queuedItem.uuid] = {error: true, msg: err};
+            RESOLVED_DATA[queuedItem.uuid] = err;
             tickleWebhook(queuedItem.uuid + "/ready", next);
         }
         else {
             var entity_id = ipv4_rows[0].id;
             db.all("select * from asn where asn.id = ?", entity_id, function (err, asn_rows) {
                 if (err) {
-                    RESOLVED_DATA[queuedItem.uuid] = {error: true, msg: err};
+                    RESOLVED_DATA[queuedItem.uuid] = err;
                     tickleWebhook(queuedItem.uuid + "/ready", next);
                 } 
                 else {
                                 
                     RESOLVED_DATA[queuedItem.uuid] = {
-                            error: false,
-                            result: {
-                                ipv4: ipv4_rows,
-                                asn: asn_rows
-                            }
+                            ip: raw_ip,
+                            ipv4: ipv4_rows,
+                            asn: asn_rows
                         };    
                     tickleWebhook(queuedItem.uuid + "/ready", next);
                 }
@@ -99,7 +97,8 @@ checkResolveQueue();
     We expect the post body to have an IP address in a JSON structure,
     like:
         {
-            "ip": "17.128.100.10"
+            "ip": "17.128.100.10",
+            "uuid": <uuid>
         }
 
 */
@@ -149,6 +148,7 @@ router.get(/^\/ip\/(([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+))\/?$/, function (req, res, 
                         {
                             error: false,
                             result: {
+                                ip: req.params[0],
                                 ipv4: ipv4_rows,
                                 asn: asn_rows
                             }
